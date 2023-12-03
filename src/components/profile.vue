@@ -1,18 +1,18 @@
 <template>
     <div class="profile">
         <table class="feats">
-            <tr v-for="item in profileKey">
+            <tr v-for="item in profile.keys">
                 <td>{{ item.desc }}</td>
                 <td v-if="item.select">
-                    <select v-model="item.value" style="width: 100%;">
-                        <option v-for="opt in item.select" :selected="opt == item.value" :value="opt">{{ opt }}</option>
+                    <select v-model="edited[item.id]" style="width: 100%;">
+                        <option v-for="opt in item.select" :selected="opt == edited[item.id]" :value="opt">{{ opt }}</option>
                     </select>
                 </td>
                 <td v-else>
-                    <input type="text" v-model="item.value">
+                    <input type="text" v-model="edited[item.id]">
                     <template v-if="item.allowLocal">
                         <br>
-                        <input class="allowLocal" type="file" @change="fileChange($event as InputFileEvent, item)">
+                        <input class="allowLocal" type="file" @change="fileChange($event as InputFileEvent, item.id)">
                     </template>
                 </td>
             </tr>
@@ -31,35 +31,26 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, watch, type Ref } from 'vue';
 import { CreateLocalUrl, DeleteLocalUrl, GetLocalUrls } from "@/utils/store";
+import { useProfileStore } from "@/stores/profileStore"
 const emit = defineEmits(["change"]);
-const profileKey = ref([
-    { id: "back", desc: "角色卡片背景", value: "" },
-    { id: "name", desc: "用户名", value: "" },
-    { id: "changeCard", desc: "自定义卡面", value: "", allowLocal: true },
-    { id: "changeDesk", desc: "自定义桌布", value: "", allowLocal: true },
-    { id: "showCard", desc: "渲染其他人的图片", select: ["true", "false"], value: "" },
-]);
-profileKey.value.forEach((item) => {
-    item.value = localStorage[item.id] ?? "";
-})
+const profile = useProfileStore();
+const edited:Ref<Record<string, string>> = ref({});
+profile.keys.forEach((item) => {
+    edited.value[item.id] = profile.get(item.id);
+});
 const save = () => {
-    profileKey.value.forEach((item) => {
-        if (localStorage[item.id] && localStorage[item.id] !== item.value && (localStorage[item.id] as string).startsWith("local:")) {
-            DeleteLocalUrl(localStorage[item.id] as string);
-        }
-        localStorage[item.id] = item.value;
-    })
-    emit("change", profileKey.value);
+    profile.update(edited.value);
+    emit("change", edited);
 }
 interface InputFileEvent extends Event {
     target: HTMLInputElement;
 };
-const fileChange = async (event: InputFileEvent, item: { id: string, value: string }) => {
+const fileChange = async (event: InputFileEvent, id: string) => {
     if (!event.target.files) return;
     const file = event.target.files[0];
-    item.value = await CreateLocalUrl(file);
+    edited.value[id] = await CreateLocalUrl(file);
 }
 const clearLocal = async () => {
     if (confirm("确定要清空所有本地文件缓存吗?")) {

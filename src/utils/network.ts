@@ -4,6 +4,7 @@ export class Room {
     ws?: WebSocket
     roomId: number
     player: IPlayer
+    isOpen: boolean
     cb: (data: { type: string, [key: string]: any }) => void
     send(msg: string | Object) {
         if (this.ws) {
@@ -17,7 +18,9 @@ export class Room {
             this.ws.send(toSend);
         }
     }
-    reconnect() {
+    reconnect(force?: boolean) {
+        if(this.isOpen && !force) return;
+        this.isOpen = true;
         if (this.ws) {
             try { this.ws.close(); } catch (e) { }
         }
@@ -32,13 +35,17 @@ export class Room {
                 name: this.player.name
             });
         }
+        let hasError = false;
         this.ws.onclose = this.ws.onerror = () => {
+            if(hasError) return;
+            hasError = true;
             this.ws!.onclose = this.ws!.onerror = null;
             this.cb({
                 type: 'error',
                 msg: '与服务器的连接断开，正在重连...'
             })
             setTimeout(() => {
+                this.isOpen = false;
                 this.reconnect();
             }, 1000);
         }
@@ -51,6 +58,7 @@ export class Room {
         this.roomId = id;
         this.player = player;
         this.cb = cb;
+        this.isOpen = false;
         this.reconnect();
     }
 }

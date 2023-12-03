@@ -4,6 +4,7 @@
     width: (props.width || width) + 'px',
     backgroundImage: `url(${cardImages[group * 13 + id]})`,
   }" @click.prevent="$emit('click')" @mouseover.prevent="$emit('mouseover')" @mousedown.prevent="$emit('mousedown')">
+    <div v-if="props.from!==undefined && profile.get('showFrom') !== 'false'" class="from">{{ game.players[props.from].name }}</div>
     <div v-if="props.real" class="real">
       <card :card="props.real.id" :color="props.real.color" @mousedown="$emit('mousedown')"
         @mouseover="$emit('mouseover')" @click="$emit('click')" class="real-card" :size="props.size"></card>
@@ -16,6 +17,10 @@ import { CARD_TRANSLATE } from "@/config/cards";
 import { computed, reactive, ref, nextTick, watch } from "vue";
 import { useCardStore } from "@/stores/cardStore";
 import { storeToRefs } from 'pinia'
+import { useGameStore } from "@/stores/gameStore";
+import { useProfileStore } from "@/stores/profileStore";
+const profile = useProfileStore();
+const {game} = storeToRefs(useGameStore())
 const CardStore = useCardStore();
 const { cardImages,loadedUrl } = storeToRefs(CardStore)
 const cardelem = ref<HTMLElement>();
@@ -38,6 +43,7 @@ defineEmits(["click", "mouseover", "mousedown"]);
 const props = defineProps({
   card: String,
   color: Number,
+  from: Number,
   size: Number,
   select: Boolean,
   width: Number,
@@ -82,9 +88,24 @@ const cardName = props.card ? ref(CARD_TRANSLATE[props.card]) : ref("?");
   height: 100%;
   width: 100%;
   background-color: rgba(0, 0, 0, 0.4);
-  padding-left: 15%;
+  padding-left: 7%;
   padding-top: 15%;
 }
 
 .real-card {}
+
+.from{
+  position: absolute;
+  left: -3px;
+  top:18px;
+  text-align: left;
+  transform-origin: 0 20px;
+  transform: rotate(90deg);
+  padding-left: 5px;
+  padding-right: 5px;
+  font-size: 12px;
+  background: rgba(0,0,0,0.5);
+  color: white;
+  z-index: 1;
+}
 </style>

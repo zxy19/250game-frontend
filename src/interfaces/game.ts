@@ -2,6 +2,7 @@ export interface ICard {
     id: string,
     color: number,
     selected?: boolean,
+    from?: number,
     real?: ICard
 }
 export interface IDeck {
@@ -19,6 +20,7 @@ export interface IPlayer {
     stored?: IDeck,
     ready?: boolean,
     offline?: boolean,
+    delay?: number,
     mark: Record<string, number>
     profile: Record<string, string>
 }

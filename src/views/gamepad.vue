@@ -5,8 +5,9 @@
       <div v-for="msg in msgs" class="msg"><b>{{ msg.from }}:</b>{{ msg.msg }}</div>
     </div>
 
-    <profile @change="showProfileBox = false; updateProfile(readProfile());" v-if="showProfileBox" class="profile-box">
-    </profile>
+    <profileVue @change="showProfileBox = false; updateProfile(profile.webProfile);" v-if="showProfileBox"
+      class="profile-box">
+    </profileVue>
     <div :class="['float-overlap', { show: optSelections.length && optPromiseCB }]">
       <div>
         <h2>请从下方选项中选择</h2><br><br><br>
@@ -22,7 +23,7 @@
         <div>
           <h2>{{ toSelectCards.name }}</h2>
         </div>
-        <Deck :deck="toSelectCards" @select_change="makeSelect" style="height: 170px;" />
+        <Deck :deck="toSelectCards" @select_change="makeSelect" :selectable="!noSelect" style="height: 170px;" />
         <button @click="selectDone" class="btn">
           确定
         </button>
@@ -36,22 +37,32 @@
             <th>操作</th>
             <th>玩家</th>
             <th>手牌</th>
+            <th>摆牌</th>
             <th>加分</th>
             <th>总分</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for=" p, idx  in  game.players ">
-            <td :class="{calcPlayer:calcRole[idx]=='算账',antiCalcPlayer:calcRole[idx]=='反算'}">{{ calcRole[idx] }}</td>
+            <td :class="{ calcPlayer: calcRole[idx] == '算账', antiCalcPlayer: calcRole[idx] == '反算' }">{{ calcRole[idx] }}
+            </td>
             <td>[{{ p.ready ? '√' : 'X' }}]{{ p.name }}</td>
             <td>
-              <Deck :deck="p.hand" style="height: 70px;width: 150px;" />
+              <Deck :deck="p.hand" class="hand" />
+            </td>
+            <td>
+              <Deck :deck="p.stored" class="stored" v-if="p.stored?.cards.length" />
             </td>
             <td>{{ lastAddScore[idx] }}</td>
             <td>{{ p.score }}</td>
           </tr>
         </tbody>
       </table><br>
+      <div class="score-table">
+        <Deck :deck="{ name: '钉牌', cards: game.pinnedCard }" style="height: 70px;width: 300px;" />
+      </div>
+
+      <br>
       <button @click="sendReady" v-if="!self.ready" :class="['btn']">
         准备
       </button>
@@ -84,7 +95,7 @@
     </div>
 
     <div class="other-players">
-      <player :player="p" v-for=" p, idx  in  game.players " style="display: inline-block;"
+      <player :id="'player-' + idx" :player="p" v-for=" p, idx  in  game.players " style="display: inline-block;"
         :class="['game-player', { current: game.stage.playerIndex == idx }]" />
     </div>
     <div class="notice">
@@ -156,7 +167,7 @@
         </div>
       </div>
       <div class="deck">
-        <Deck :deck="self.hand" @select_change="deckSelect" style="height: 170px;" />
+        <Deck :deck="self.hand" @select_change="deckSelect" :selectable="true" style="height: 170px;" />
       </div>
     </div>
     <div :class="['msg-ops', { show: showMsgBox }]">
@@ -188,38 +199,25 @@ import {
   pickRandom,
 } from "@/utils/cardUtils";
 import { isPlayer, createPlayer, id2index, internalId2index } from "@/utils/player";
-import { computed, onMounted, onUnmounted, ref, type Ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch, type Ref } from "vue";
 import { Room } from "@/utils/network";
 import { GAME_OPERATES } from "@/interfaces/game";
 import { initGame, putCard, isValidPutCard, drawCard, nxtPlayer, discardCard, canPutCard, canCalc } from "@/utils/game";
 import Card from "@/components/card.vue";
-import profile from "@/components/profile.vue";
+import profileVue from "@/components/profile.vue";
 import { useCardStore } from "@/stores/cardStore";
 import { GetLocalUrl } from "@/utils/store";
+import { storeToRefs } from "pinia";
+import { useGameStore } from "@/stores/gameStore";
+import { useProfileStore } from "@/stores/profileStore";
 const CardStore = useCardStore();
 const qaList = [
-  '🥰', '👌', '👍', '😅', '🤔', '😎', '😭', '🤡', '😡', '🐶','😨','🤣'
+  '🥰', '👌', '👍', '😅', '🤔', '😎', '😭', '🤡', '😡', '🐶', '😨', '🤣'
 ];
 const hasCha = ref(false);
 const showProfileBox = ref(false);
-const self: Ref<IPlayer> = ref(createPlayer());
-const game: Ref<IGame> = ref({
-  players: [self.value],
-  stage: {
-    round: -1,
-    playerIndex: 0,
-    operate: 0,
-    data: {},
-  },
-  pinnedCard: [],
-  lastOperatedCards: createDeck("", [{ id: "JOK", color: 2 }, { id: "JOK", color: 2 }, { id: "JOK", color: 2 }]),
-  lastOperate: "等待玩家进入...",
-  allCards: createDeck("all", []),
-  allShown: createDeck("all", []),
-  config: {
-
-  }
-});
+const profile = useProfileStore();
+const { self, game } = storeToRefs(useGameStore()) as { self: Ref<IPlayer>, game: Ref<IGame> };
 const calcRole = ref([""]);
 const lastAddScore = ref([0]);
 const selfTurn = ref(false);
@@ -245,14 +243,14 @@ async function updateDeskImage() {
   deskBackground.value = url
 }
 function updateCardImage() {
-  CardStore.useImage(localStorage.getItem("changeCard") || "svg-cards.svg").catch(() => {
+  CardStore.useImage(profile.get("changeCard")).catch(() => {
     alert("卡面图片加载失败，检查设置");
     CardStore.useImage("svg-cards.svg");
   });
 }
 updateCardImage();
 //附加选牌器
-const toSelectCards = ref<IDeck>(createDeck("可供选择的卡", []));
+const toSelectCards = ref<IDeck>(createDeck("可供选择的卡", [])), noSelect = ref(false);
 let makeSelectedCards: ICard[] = [], makeSelectPromiseCB: Function | null = null;
 function makeSelect(e: ICard[]) {
   makeSelectedCards = e;
@@ -263,7 +261,8 @@ function selectDone() {
     makeSelectPromiseCB();
   }
 }
-async function selectCard(cards: ICard[], prompt?: string) {
+async function selectCard(cards: ICard[], prompt?: string, isNoSelect = false) {
+  noSelect.value = isNoSelect
   if (prompt) {
     toSelectCards.value.name = prompt
   } else {
@@ -377,15 +376,6 @@ function updateProfile(profile?: any) {
     profile: self.value.profile
   })
 }
-function readProfile() {
-  let ret: Record<string, any> = {};
-  ["back", "name", "changeCard", "showCard", "changeDesk"].forEach((key) => {
-    if (localStorage.getItem(key)) {
-      ret[key] = localStorage.getItem(key)!;
-    }
-  })
-  return ret;
-}
 
 //
 function operateGame(data: IGame) {
@@ -428,12 +418,19 @@ const msgInput = ref<HTMLInputElement>();
 const noticeMsg = ref("");
 const noticeDeck = ref(createDeck("", []));
 const noticeLasting = ref(0);
+const lastPingTime = ref(1000);
 const tipMsg = ref("");
 const toSendMsg = ref("");
 const showCalc = ref(false), showPutCard = ref(false), showGameOver = ref(false), showMsgBox = ref(false);
 setInterval(() => {
   if (noticeLasting.value > 0) {
     noticeLasting.value--;
+  }
+  if (lastPingTime.value > 0) {
+    lastPingTime.value--;
+  } else {
+    lastPingTime.value = 10000;
+    room.reconnect(true);
   }
   msgs.value.forEach((msg) => {
     msg.time--;
@@ -481,6 +478,8 @@ const room = new Room(localStorage['room'] || "1234", self.value, (data: any) =>
         hasTakeAction.value = false;
       }
     }
+  } else if (data.type == "putCard") {
+    notice(`玩家${data.game.players[data.game.stage.playerIndex].name}摆牌`, [...data.cards]);
   } else if (data.type == "putCardDone") {
     if (data.add) {
       notice(`玩家${data.game.players[data.game.stage.playerIndex].name}插牌`, [...data.cards]);
@@ -494,7 +493,7 @@ const room = new Room(localStorage['room'] || "1234", self.value, (data: any) =>
   } else if (data.type == "putCardSelect") {
     (async () => {
       while (true) {
-        let card = await selectCard(data.selection);
+        let card = await selectCard(data.selection, `请选择${data.count}张牌`);
         if (card.length == data.count) {
           room.send({
             type: "putCardSelect",
@@ -542,7 +541,12 @@ const room = new Room(localStorage['room'] || "1234", self.value, (data: any) =>
     hasTakeAction.value = false;
     notice(data.msg);
   } else if (data.type == "hello") {
-    updateProfile(readProfile());
+    updateProfile(profile.webProfile);
+    if (!data.hasGame) {
+      self.value.ready = false;
+      game.value.stage.round = -1;
+      game.value.lastOperatedCards.cards = [];
+    }
   } else if (data.type == "join") {
     game.value.players = data.player;
     notice(`您已成功进入房间`, []);
@@ -570,8 +574,27 @@ const room = new Room(localStorage['room'] || "1234", self.value, (data: any) =>
       from: data.from,
       time: 7
     })
+  } else if (data.type == "ping") {
+    room.send({
+      type: "pong",
+      tick: data.tick
+    });
+    lastPingTime.value = 20;
+  } else if (data.type == "pingResult") {
+    (data.ping as number[]).forEach((t, idx) => {
+      game.value.players[idx].delay = t;
+    })
+  } else if (data.type == "firstCard") {
+    selectCard([data.card], "第一张牌是", true);
   }
 });
+
+let lastPlayerIndex = -1;
+watch(() => game.value.stage.playerIndex, () => {
+  let playerElem = document.getElementById(`player-${game.value.stage.playerIndex}`)!;
+  playerElem.parentElement!.scrollTo({ left: playerElem.offsetLeft, behavior: 'smooth' });
+})
+
 notice("等待其他玩家进入游戏");
 const enterUp = (e: KeyboardEvent) => {
   if (e.key == "Enter") {
@@ -722,6 +745,14 @@ main {
     max-width: calc(25% - 20px);
     margin: 10px 3px !important;
   }
+
+  .score-table .stored {
+    width: 90px !important;
+  }
+
+  .score-table .hand {
+    width: 110px !important;
+  }
 }
 
 .self-ops .ops button.show {
@@ -740,7 +771,7 @@ main {
   overflow-y: auto;
   transition: all 0.3s;
   background-color: rgba(0, 0, 0, 0.5);
-  z-index: 1005;
+  z-index: 10005;
   text-align: center;
   padding-top: 100px;
   color: white;
@@ -831,12 +862,20 @@ main {
     padding-top: 0%;
   }
 }
-.calcPlayer{
-  color:#e91e63;
+
+.score-table .hand,
+.score-table .stored {
+  height: 70px;
+  width: 150px;
+}
+
+.calcPlayer {
+  color: #e91e63;
   font-weight: bold;
 }
-.antiCalcPlayer{
-  color:#1a237e;
+
+.antiCalcPlayer {
+  color: #1a237e;
   font-weight: bold;
 }
 </style>
@@ -846,7 +885,7 @@ main {
   top: 220px;
   left: 0;
   width: 50%;
-  z-index: 1000000;
+  z-index: 10004;
   background-color: rgba(0, 0, 0, 0.7);
   color: white;
   max-width: 400px;

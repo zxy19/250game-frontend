@@ -1,4 +1,4 @@
-import { defineStore } from 'pinia';
+import { defineStore, storeToRefs } from 'pinia';
 import { GetLocalUrl } from '@/utils/store';
 export const useCardStore = defineStore('CardStore', {
     // state
