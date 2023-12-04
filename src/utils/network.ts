@@ -1,3 +1,4 @@
+import { host } from "@/config/net";
 import type { IPlayer } from "@/interfaces/game";
 
 export class Room {
@@ -26,7 +27,7 @@ export class Room {
         }
         if (location.hostname == "127.0.0.1" || location.hostname == "localhost") {
             this.ws = new WebSocket(`ws://127.0.0.1:19981/`);
-        } else this.ws = new WebSocket(`wss://250.xypp.cc:19981/`);
+        } else this.ws = new WebSocket(host);
         this.ws.onopen = () => {
             this.send({
                 type: 'reg',

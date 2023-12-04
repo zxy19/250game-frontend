@@ -24,9 +24,11 @@
           <h2>{{ toSelectCards.name }}</h2>
         </div>
         <Deck :deck="toSelectCards" @select_change="makeSelect" :selectable="!noSelect" style="height: 170px;" />
-        <button @click="selectDone" class="btn">
-          确定
-        </button>
+        <div>
+          <button @click="selectDone" class="btn" style="width: 90px;">
+            确定
+          </button>
+        </div>
       </div>
     </div>
     <div :class="['float-overlap', { show: (!showGameOver && game.stage.operate == GAME_OPERATES.SCORE) }]">
@@ -184,6 +186,7 @@
         <span class="quick-act" v-for="msg in qaList" :key="msg" @click="toSendMsg = msg; sendMsg()">{{ msg }}</span>
       </div>
     </div>
+    <div class="deck-hash">卡堆hash[{{ game.datas ? game.datas.deckHash : '暂无数据' }}]</div>
   </main>
 </template>
 
@@ -380,6 +383,7 @@ function updateProfile(profile?: any) {
 //
 function operateGame(data: IGame) {
   game.value = data;
+  let findMe = false;
   game.value.players.forEach((player, idx) => {
     if (player.id == self.value.id) {
       self.value = player;
@@ -389,9 +393,12 @@ function operateGame(data: IGame) {
       } else {
         selfTurn.value = false;
       }
+      findMe = true;
     }
   });
-  if (selfTurn.value) {
+  if (!findMe) {
+    tip("正在观战");
+  } else if (selfTurn.value) {
     if (game.value.stage.operate == GAME_OPERATES.WAIT_CHA) {
       tip("等待其他玩家选择是否插牌");
     } else if (game.value.stage.operate == GAME_OPERATES.PUTCARD) {
@@ -592,7 +599,7 @@ const room = new Room(localStorage['room'] || "1234", self.value, (data: any) =>
 let lastPlayerIndex = -1;
 watch(() => game.value.stage.playerIndex, () => {
   let playerElem = document.getElementById(`player-${game.value.stage.playerIndex}`)!;
-  playerElem.parentElement!.scrollTo({ left: playerElem.offsetLeft, behavior: 'smooth' });
+  (playerElem.parentNode as HTMLElement)!.scrollTo({ left: playerElem.offsetLeft, behavior: 'smooth' });
 })
 
 notice("等待其他玩家进入游戏");
@@ -935,5 +942,13 @@ input.ipt-ctr {
   display: inline-block;
   padding: 6px;
   cursor: pointer;
+}
+
+.deck-hash {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  z-index: 100000;
+  font-size: 8px;
 }
 </style>

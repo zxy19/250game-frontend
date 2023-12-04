@@ -49,5 +49,8 @@ export interface IGame {
     allShown: IDeck,
     players: IPlayer[],
     allCards: IDeck,
+    datas?:{
+        deckHash: string
+    },
     config: Record<string, any>
 }

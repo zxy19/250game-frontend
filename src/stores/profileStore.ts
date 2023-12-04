@@ -4,11 +4,11 @@ export const useProfileStore = defineStore('ProfileStore', {
     // state
     state: () => {
         let _: {
-            keys: { id: string, desc: string, value: string, select?: string[], allowLocal?: boolean }[],
+            keys: { id: string, desc: string, value: string, select?: string[], allowLocal?: boolean, cloud?: boolean }[],
             profile: Record<string, string>
         } = {
             keys: [
-                { id: "back", desc: "角色卡片背景", value: "" },
+                { id: "back", desc: "角色卡片背景", value: "",cloud: true },
                 { id: "name", desc: "用户名", value: "" },
                 { id: "changeCard", desc: "自定义卡面", value: "svg-cards.svg", allowLocal: true },
                 { id: "changeDesk", desc: "自定义桌布", value: "", allowLocal: true },

@@ -5,7 +5,8 @@
                 <td>{{ item.desc }}</td>
                 <td v-if="item.select">
                     <select v-model="edited[item.id]" style="width: 100%;">
-                        <option v-for="opt in item.select" :selected="opt == edited[item.id]" :value="opt">{{ opt }}</option>
+                        <option v-for="opt in item.select" :selected="opt == edited[item.id]" :value="opt">{{ opt }}
+                        </option>
                     </select>
                 </td>
                 <td v-else>
@@ -14,6 +15,10 @@
                         <br>
                         <input class="allowLocal" type="file" @change="fileChange($event as InputFileEvent, item.id)">
                     </template>
+                    <template v-if="item.cloud">
+                        <br>
+                        <input class="allowCloud" type="file" @change="cloudUpload($event as InputFileEvent, item.id)">
+                    </template>
                 </td>
             </tr>
         </table>
@@ -21,7 +26,7 @@
 
         </div>
         <div>
-            <button @click="save" class="btn">确定</button>
+            <button @click="save" class="btn" :disabled="loading">{{(!loading)?'确定':"..."}}</button>
         </div>
         <div>
             <br><br><br>
@@ -34,9 +39,11 @@
 import { ref, watch, type Ref } from 'vue';
 import { CreateLocalUrl, DeleteLocalUrl, GetLocalUrls } from "@/utils/store";
 import { useProfileStore } from "@/stores/profileStore"
+import {cloud} from "@/config/net";
+const loading = ref(false);
 const emit = defineEmits(["change"]);
 const profile = useProfileStore();
-const edited:Ref<Record<string, string>> = ref({});
+const edited: Ref<Record<string, string>> = ref({});
 profile.keys.forEach((item) => {
     edited.value[item.id] = profile.get(item.id);
 });
@@ -51,6 +58,26 @@ const fileChange = async (event: InputFileEvent, id: string) => {
     if (!event.target.files) return;
     const file = event.target.files[0];
     edited.value[id] = await CreateLocalUrl(file);
+}
+const cloudUpload = async (event: InputFileEvent, id: string) => {
+    if (!event.target.files) return;
+    loading.value = true;
+    try {
+        const file = event.target.files[0];
+        const form = new FormData();
+        form.append("file", file);
+        let url = await (await fetch(cloud, {
+            method: "POST",
+            body: form
+        })).text();
+        if (url.startsWith("https://")) {
+            edited.value[id] = url;
+        } else {
+            alert(url);
+        }
+    }finally{
+        loading.value = false;
+    }
 }
 const clearLocal = async () => {
     if (confirm("确定要清空所有本地文件缓存吗?")) {
