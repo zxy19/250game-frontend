@@ -4,6 +4,9 @@ import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router'
 import { createPinia } from 'pinia'
+import { useRegisterSW } from 'virtual:pwa-register/vue';
+
+useRegisterSW();
 
 const app = createApp(App)
 

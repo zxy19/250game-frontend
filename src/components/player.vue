@@ -11,7 +11,7 @@
             <Deck class="hand" :deck="calcDeck" style="display:inline-block;width: 70px;height: 40px;" :no-scroll="true"></Deck>
             <span :class="{ 'half-white': (showPic && props.player!.profile.back) }">余{{ calcDeck.cards.length }}</span>
         </div>
-        <Deck class="store" :deck="(props.player as IPlayer).stored" style="width: 130px;height: 70px;" />
+        <Deck class="store" :thin="true" :deck="(props.player as IPlayer).stored" style="width: 130px;height: 70px;" />
         <div class="readyStat" v-if="!((props.player as IPlayer).ready)">未准备</div>
         <div class="offlineStat" v-if="((props.player as IPlayer).offline)">掉线</div>
         <div class="ping" :style="{ color: calcDelayColor }" v-if="((props.player as IPlayer).delay) !== undefined">{{ (props.player as
@@ -83,7 +83,7 @@ const calcDelayColor = computed(() => {
 
     .player-block .store {
         position: relative;
-        top: -15px;
+        top: 0px;
         height: 50px;
         width: 80px;
     }
@@ -115,7 +115,7 @@ const calcDelayColor = computed(() => {
 
     .player-block .store {
         position: relative;
-        top: -15px;
+        top: 0px;
         height: 50px;
         width: 80px;
     }

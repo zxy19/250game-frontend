@@ -6,6 +6,7 @@ export class Room {
     roomId: number
     player: IPlayer
     isOpen: boolean
+    isReleased: boolean = false;
     cb: (data: { type: string, [key: string]: any }) => void
     send(msg: string | Object) {
         if (this.ws) {
@@ -20,7 +21,8 @@ export class Room {
         }
     }
     reconnect(force?: boolean) {
-        if(this.isOpen && !force) return;
+        if (this.isReleased) return;
+        if (this.isOpen && !force) return;
         this.isOpen = true;
         if (this.ws) {
             try { this.ws.close(); } catch (e) { }
@@ -35,14 +37,18 @@ export class Room {
                 group: this.roomId,
                 name: this.player.name
             });
+            this.cb({
+                type: 'open',
+                msg: '重新建立连接'
+            })
         }
         let hasError = false;
         this.ws.onclose = this.ws.onerror = () => {
-            if(hasError) return;
+            if (hasError) return;
             hasError = true;
             this.ws!.onclose = this.ws!.onerror = null;
             this.cb({
-                type: 'error',
+                type: 'disconnected',
                 msg: '与服务器的连接断开，正在重连...'
             })
             setTimeout(() => {
@@ -61,5 +67,13 @@ export class Room {
         this.cb = cb;
         this.isOpen = false;
         this.reconnect();
+    }
+    release() {
+        this.isReleased = true;
+        if (this.ws) {
+            this.ws!.onclose = this.ws!.onerror = null!;
+            this.ws?.close();
+        }
+        this.cb = null!;
     }
 }

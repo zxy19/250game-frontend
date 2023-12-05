@@ -26,10 +26,11 @@
 
         </div>
         <div>
-            <button @click="save" class="btn" :disabled="loading">{{(!loading)?'确定':"..."}}</button>
+            <button @click="save" class="btn" :disabled="loading">{{ (!loading) ? '确定' : "..." }}</button>
         </div>
         <div>
             <br><br><br>
+            <a @click="premitNotify" style="text-decoration: underline;cursor: pointer;">&gt;授权通知弹窗</a><br><br>
             <a @click="clearLocal" style="text-decoration: underline;cursor: pointer;">&gt;清空所有本地文件缓存</a>
         </div>
     </div>
@@ -39,7 +40,7 @@
 import { ref, watch, type Ref } from 'vue';
 import { CreateLocalUrl, DeleteLocalUrl, GetLocalUrls } from "@/utils/store";
 import { useProfileStore } from "@/stores/profileStore"
-import {cloud} from "@/config/net";
+import { cloud } from "@/config/net";
 const loading = ref(false);
 const emit = defineEmits(["change"]);
 const profile = useProfileStore();
@@ -75,7 +76,7 @@ const cloudUpload = async (event: InputFileEvent, id: string) => {
         } else {
             alert(url);
         }
-    }finally{
+    } finally {
         loading.value = false;
     }
 }
@@ -86,6 +87,18 @@ const clearLocal = async () => {
         });
     }
 }
+const premitNotify = () => {
+    if (Notification.permission == "granted") {
+        navigator.serviceWorker.getRegistration().then((registration) => {
+            registration?.showNotification("授权通知", {
+                body: "已授权通知弹窗",
+            })
+        })
+    } else
+        Notification.requestPermission().then(() => {
+            premitNotify();
+        });
+}
 </script>
 <style scoped>
 .profile {
@@ -93,6 +106,7 @@ const clearLocal = async () => {
     border-radius: 5px;
     text-align: center;
     box-shadow: 2px 2px 4px gray;
+    overflow-y: auto;
 }
 
 .feats {

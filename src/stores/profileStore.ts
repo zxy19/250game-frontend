@@ -8,12 +8,13 @@ export const useProfileStore = defineStore('ProfileStore', {
             profile: Record<string, string>
         } = {
             keys: [
-                { id: "back", desc: "角色卡片背景", value: "",cloud: true },
+                { id: "back", desc: "角色卡片背景", value: "", cloud: true },
                 { id: "name", desc: "用户名", value: "" },
                 { id: "changeCard", desc: "自定义卡面", value: "svg-cards.svg", allowLocal: true },
                 { id: "changeDesk", desc: "自定义桌布", value: "", allowLocal: true },
                 { id: "showCard", desc: "渲染其他人的图片", select: ["true", "false"], value: "true" },
                 { id: "showFrom", desc: "弃牌堆显示来源", select: ["true", "false"], value: "true" },
+                { id: "showNotifaction", desc: "显示通知", select: ["always", "whenHidden", "noFocus", "never"], value: "whenHidden" },
             ],
             profile: {}
         };
@@ -41,7 +42,7 @@ export const useProfileStore = defineStore('ProfileStore', {
                 if (localStorage[item.id] && localStorage[item.id] !== data[item.id] && (localStorage[item.id] as string).startsWith("local:")) {
                     DeleteLocalUrl(localStorage[item.id] as string);
                 }
-                this.profile[item.id]=localStorage[item.id] = data[item.id];
+                this.profile[item.id] = localStorage[item.id] = data[item.id];
             })
         }
     }

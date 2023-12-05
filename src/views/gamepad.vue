@@ -226,18 +226,6 @@ const lastAddScore = ref([0]);
 const selfTurn = ref(false);
 const hasTakeAction = ref(false);
 const deskBackground: Ref<string | undefined> = ref();
-//本地玩家信息
-if (localStorage.getItem("name")) {
-  self.value.name = localStorage.getItem("name")!;
-} else {
-  self.value.name = prompt("请输入你的名字", self.value.name)!;
-  localStorage.setItem("name", self.value.name);
-}
-if (localStorage.getItem("id")) {
-  self.value.id = localStorage.getItem("id")!;
-} else {
-  localStorage.setItem("id", self.value.id);
-}
 async function updateDeskImage() {
   let url = (localStorage.getItem("changeDesk") || undefined);
   if (url && url.startsWith("local:")) {
@@ -381,7 +369,8 @@ function updateProfile(profile?: any) {
 }
 
 //
-function operateGame(data: IGame) {
+function operateGame(data: IGame, oData: Record<string, any>) {
+  let lastOperate = game.value.stage.operate;
   game.value = data;
   let findMe = false;
   game.value.players.forEach((player, idx) => {
@@ -402,6 +391,7 @@ function operateGame(data: IGame) {
     if (game.value.stage.operate == GAME_OPERATES.WAIT_CHA) {
       tip("等待其他玩家选择是否插牌");
     } else if (game.value.stage.operate == GAME_OPERATES.PUTCARD) {
+      if (lastOperate != GAME_OPERATES.PUTCARD) sendNotifaction("到你了", "现在是你的回合");
       tip("你的回合，请选择是否摆牌/算账，然后摸牌");
     } else if (game.value.stage.operate == GAME_OPERATES.DISCARD) {
       tip("你已经摸牌，请选择弃牌");
@@ -411,9 +401,13 @@ function operateGame(data: IGame) {
   } else {
     if (game.value.stage.operate == GAME_OPERATES.WAIT_CHA) {
       if (hasTakeAction.value) tip("等待其他玩家选择是否插牌");
-      else tip("请选择是否插牌");
+      else { tip("请选择是否插牌"); }
+      if (lastOperate != GAME_OPERATES.WAIT_CHA && canPutCard(game.value, self.value.hand!, undefined, oData.card))
+        sendNotifaction("到你了", "请选择是否插牌");
     } else if (game.value.stage.operate == GAME_OPERATES.CALC) {
       tip("请选择是否反算");
+      if (lastOperate != GAME_OPERATES.CALC && canCalc(game.value, self.value))
+        sendNotifaction("到你了", "请选择是否反算");
     } else {
       tip("等待其他玩家操作");
     }
@@ -429,23 +423,6 @@ const lastPingTime = ref(1000);
 const tipMsg = ref("");
 const toSendMsg = ref("");
 const showCalc = ref(false), showPutCard = ref(false), showGameOver = ref(false), showMsgBox = ref(false);
-setInterval(() => {
-  if (noticeLasting.value > 0) {
-    noticeLasting.value--;
-  }
-  if (lastPingTime.value > 0) {
-    lastPingTime.value--;
-  } else {
-    lastPingTime.value = 10000;
-    room.reconnect(true);
-  }
-  msgs.value.forEach((msg) => {
-    msg.time--;
-  })
-  while (msgs.value.length > 0 && msgs.value[0].time <= 0) {
-    msgs.value.shift();
-  }
-}, 1000);
 function notice(msg: string, cards?: ICard[]) {
   noticeMsg.value = msg;
   if (cards !== undefined) {
@@ -466,136 +443,183 @@ function sendMsg() {
   showMsgBox.value = false;
   msgInput.value?.blur();
 }
-
-const room = new Room(localStorage['room'] || "1234", self.value, (data: any) => {
-  if (data.game) {
-    operateGame(data.game);
-  }
-  if (data.type == "cha") {
-    notice(`玩家${data.game.players[data.game.stage.playerIndex].name}插牌`, data.cards);
-  } else if (data.type == "draw") {
-    notice(`玩家${data.game.players[data.game.stage.playerIndex].name}摸牌`, []);
-  } else if (data.type == "discardCard") {
-    notice(`玩家${data.game.players[data.game.stage.playerIndex].name}弃牌`, [data.card]);
-    if (!selfTurn.value) {
-      //自动处理不能插牌的情况
-      if (!canPutCard(data.game, self.value.hand!, undefined, data.card)) {
-        notcha();
-      } else {
-        hasTakeAction.value = false;
+let isConnected = false;
+let room: Room;
+let roomInterval: number;
+const createRoomObj = () => {
+  if (profile.get("showNotifaction") != "never") {
+    if ('Notification' in window) {
+      if (Notification.permission != "granted") {
+        Notification.requestPermission();
       }
     }
-  } else if (data.type == "putCard") {
-    notice(`玩家${data.game.players[data.game.stage.playerIndex].name}摆牌`, [...data.cards]);
-  } else if (data.type == "putCardDone") {
-    if (data.add) {
-      notice(`玩家${data.game.players[data.game.stage.playerIndex].name}插牌`, [...data.cards]);
-    } else {
-      notice(`玩家${data.game.players[data.game.stage.playerIndex].name}摆牌`, [...data.cards]);
+  }
+  if (localStorage.getItem("name")) {
+    self.value.name = localStorage.getItem("name")!;
+  } else {
+    self.value.name = prompt("请输入你的名字", self.value.name)!;
+    localStorage.setItem("name", self.value.name);
+  }
+  if (localStorage.getItem("id")) {
+    self.value.id = localStorage.getItem("id")!;
+  } else {
+    localStorage.setItem("id", self.value.id);
+  }
+  room = new Room(localStorage['room'] || "1234", self.value, (data: any) => {
+    if (data.game) {
+      operateGame(data.game, data);
     }
-    if (selfTurn.value) {
-      showPutCard.value = canPutCard(data.game, self.value.hand!, self.value.stored);
-      showCalc.value = canCalc(data.game, self.value);
-    }
-  } else if (data.type == "putCardSelect") {
-    (async () => {
-      while (true) {
-        let card = await selectCard(data.selection, `请选择${data.count}张牌`);
-        if (card.length == data.count) {
-          room.send({
-            type: "putCardSelect",
-            selection: card
-          })
-          break;
+    if (data.type == "cha") {
+      notice(`玩家${data.game.players[data.game.stage.playerIndex].name}插牌`, data.cards);
+    } else if (data.type == "draw") {
+      notice(`玩家${data.game.players[data.game.stage.playerIndex].name}摸牌`, []);
+    } else if (data.type == "discardCard") {
+      notice(`玩家${data.game.players[data.game.stage.playerIndex].name}弃牌`, [data.card]);
+      if (!selfTurn.value) {
+        //自动处理不能插牌的情况
+        if (!canPutCard(data.game, self.value.hand!, undefined, data.card)) {
+          notcha();
+        } else {
+          hasTakeAction.value = false;
         }
       }
-    })();
-  } else if (data.type == "optSelect") {
-    (async () => {
-      let value = await selectOpt(data.selections);
-      data.orgData[data.key] = value;
-      room.send(data.orgData)
-    })();
-  } else if (data.type == "calc") {
-    notice(`玩家${data.game.players[data.game.stage.playerIndex].name}发起算账`, []);
-    if (!selfTurn.value) {
-      if (!canCalc(data.game, self.value)) {
-        notAntiCalc();
+    } else if (data.type == "putCard") {
+      notice(`玩家${data.game.players[data.game.stage.playerIndex].name}摆牌`, [...data.cards]);
+    } else if (data.type == "putCardDone") {
+      if (data.add) {
+        notice(`玩家${data.game.players[data.game.stage.playerIndex].name}插牌`, [...data.cards]);
       } else {
-        hasTakeAction.value = false;
+        notice(`玩家${data.game.players[data.game.stage.playerIndex].name}摆牌`, [...data.cards]);
       }
-    }
-  } else if (data.type == "next") {
-    notice(`${data.game.players[data.game.stage.playerIndex].name}`, []);
-    if (selfTurn.value) {
-      showPutCard.value = canPutCard(data.game, self.value.hand!, self.value.stored);
-      showCalc.value = canCalc(data.game, self.value);
-    }
-  } else if (data.type == "calcDone") {
-    lastAddScore.value = data.res;
-    for (let i = 0; i < data.game.players.length; i++) {
-      calcRole.value[i] = "";
-    }
-    calcRole.value[internalId2index(data.game, data.player)] = "算账";
-    for (let id of data.antiCalc) {
-      calcRole.value[internalId2index(data.game, id)] = "反算";
-    }
-  } else if (data.type == "ready") {
-    if (!data.game) {
+      if (selfTurn.value) {
+        showPutCard.value = canPutCard(data.game, self.value.hand!, self.value.stored);
+        showCalc.value = canCalc(data.game, self.value);
+      }
+    } else if (data.type == "putCardSelect") {
+      (async () => {
+        while (true) {
+          let card = await selectCard(data.selection, `请选择${data.count}张牌`);
+          if (card.length == data.count) {
+            room.send({
+              type: "putCardSelect",
+              selection: card
+            })
+            break;
+          }
+        }
+      })();
+    } else if (data.type == "optSelect") {
+      (async () => {
+        let value = await selectOpt(data.selections);
+        data.orgData[data.key] = value;
+        room.send(data.orgData)
+      })();
+    } else if (data.type == "calc") {
+      notice(`玩家${data.game.players[data.game.stage.playerIndex].name}发起算账`, []);
+      if (!selfTurn.value) {
+        if (!canCalc(data.game, self.value)) {
+          notAntiCalc();
+        } else {
+          hasTakeAction.value = false;
+        }
+      }
+    } else if (data.type == "next") {
+      notice(`${data.game.players[data.game.stage.playerIndex].name}`, []);
+      if (selfTurn.value) {
+        showPutCard.value = canPutCard(data.game, self.value.hand!, self.value.stored);
+        showCalc.value = canCalc(data.game, self.value);
+      }
+    } else if (data.type == "calcDone") {
+      lastAddScore.value = data.res;
+      for (let i = 0; i < data.game.players.length; i++) {
+        calcRole.value[i] = "";
+      }
+      calcRole.value[internalId2index(data.game, data.player)] = "算账";
+      for (let id of data.antiCalc) {
+        calcRole.value[internalId2index(data.game, id)] = "反算";
+      }
+      sendNotifaction("算账", `${game.value.players[internalId2index(data.game, data.player)].name}发起的算账已完成`);
+    } else if (data.type == "ready") {
+      if (!data.game) {
+        game.value.players = data.player;
+      }
+    } else if (data.type == "error") {
+      hasTakeAction.value = false;
+      notice(data.msg);
+    } else if (data.type == "hello") {
+      updateProfile(profile.webProfile);
+      if (!data.hasGame) {
+        self.value.ready = false;
+        game.value.stage.round = -1;
+        game.value.lastOperatedCards.cards = [];
+      }
+    } else if (data.type == "join") {
       game.value.players = data.player;
-    }
-  } else if (data.type == "error") {
-    hasTakeAction.value = false;
-    notice(data.msg);
-  } else if (data.type == "hello") {
-    updateProfile(profile.webProfile);
-    if (!data.hasGame) {
+      notice(`您已成功进入房间`, []);
+    } else if (data.type == "leave") {
+      if (!data.game) game.value.players = data.player;
+    } else if (data.type == "start") {
+      notice("游戏开始");
+    } else if (data.type == "gameOver") {
+      showGameOver.value = true;
       self.value.ready = false;
       game.value.stage.round = -1;
       game.value.lastOperatedCards.cards = [];
-    }
-  } else if (data.type == "join") {
-    game.value.players = data.player;
-    notice(`您已成功进入房间`, []);
-  } else if (data.type == "leave") {
-    if (!data.game) game.value.players = data.player;
-  } else if (data.type == "start") {
-    notice("游戏开始");
-  } else if (data.type == "gameOver") {
-    showGameOver.value = true;
-    self.value.ready = false;
-    game.value.stage.round = -1;
-    game.value.lastOperatedCards.cards = [];
-    game.value.players.forEach((player) => {
-      player.ready = false;
-    })
-  } else if (data.type == "setProfile") {
-    for (let player of game.value.players) {
-      if (player.internalId == data.id) {
-        player.profile = data.profile;
+      game.value.players.forEach((player) => {
+        player.ready = false;
+      })
+    } else if (data.type == "setProfile") {
+      for (let player of game.value.players) {
+        if (player.internalId == data.id) {
+          player.profile = data.profile;
+        }
       }
+    } else if (data.type == "msg") {
+      msgs.value.push({
+        msg: data.msg,
+        from: data.from,
+        time: 7
+      })
+      sendNotifaction(data.from, data.msg);
+    } else if (data.type == "ping") {
+      room.send({
+        type: "pong",
+        tick: data.tick
+      });
+      lastPingTime.value = 20;
+    } else if (data.type == "pingResult") {
+      (data.ping as number[]).forEach((t, idx) => {
+        game.value.players[idx].delay = t;
+      })
+    } else if (data.type == "firstCard") {
+      selectCard([data.card], "第一张牌是", true);
+    } else if (data.type == "disconnected") {
+      notice(data.msg);
+      if (isConnected) sendNotifaction("网络异常", data.msg);
+      isConnected = false;
+    } else if (data.type == "open") {
+      isConnected = true;
     }
-  } else if (data.type == "msg") {
-    msgs.value.push({
-      msg: data.msg,
-      from: data.from,
-      time: 7
+  });
+  roomInterval = setInterval(() => {
+    if (noticeLasting.value > 0) {
+      noticeLasting.value--;
+    }
+    if (lastPingTime.value > 0) {
+      lastPingTime.value--;
+    } else {
+      lastPingTime.value = 10000;
+      if (room)
+        room.reconnect(true);
+    }
+    msgs.value.forEach((msg) => {
+      msg.time--;
     })
-  } else if (data.type == "ping") {
-    room.send({
-      type: "pong",
-      tick: data.tick
-    });
-    lastPingTime.value = 20;
-  } else if (data.type == "pingResult") {
-    (data.ping as number[]).forEach((t, idx) => {
-      game.value.players[idx].delay = t;
-    })
-  } else if (data.type == "firstCard") {
-    selectCard([data.card], "第一张牌是", true);
-  }
-});
-
+    while (msgs.value.length > 0 && msgs.value[0].time <= 0) {
+      msgs.value.shift();
+    }
+  }, 1000);
+}
 let lastPlayerIndex = -1;
 watch(() => game.value.stage.playerIndex, () => {
   let playerElem = document.getElementById(`player-${game.value.stage.playerIndex}`)!;
@@ -611,12 +635,77 @@ const enterUp = (e: KeyboardEvent) => {
     }
   }
 }
+
+let windowHidden = false;
+const visibilityChange = () => {
+  document.title = document.title.replaceAll('[后台]', '');
+  if (document.hidden) {
+    windowHidden = true;
+    document.title = '[后台]' + document.title;
+  } else {
+    windowHidden = false;
+    closeAllNotify();
+  }
+}
+window.addEventListener("focus", () => {
+  closeAllNotify();
+})
+let lastNotify: Notification | undefined;
+const closeAllNotify = () => {
+  if (!('Notification' in window)) return;
+  if (lastNotify) {
+    lastNotify.close();
+    lastNotify = undefined;
+  }
+  navigator.serviceWorker.getRegistration().then((registration) => {
+    registration?.getNotifications().then((notifications) => {
+      notifications.forEach((notification) => {
+        notification.close();
+      })
+    })
+  });
+}
+const sendNotifaction = (title: string, content: string) => {
+  if (!('Notification' in window)) return;
+  if (!windowHidden && profile.get("showNotifaction") == "whenHidden") {
+    return;
+  } else if (profile.get("showNotifaction") == "noFocus" && document.hasFocus()) {
+    return;
+  } else if (profile.get("showNotifaction") == "never") {
+    return;
+  }
+
+  if (Notification.permission == "granted") {
+    closeAllNotify();
+    navigator.serviceWorker.getRegistration().then((registration) => {
+      registration!.showNotification(title, {
+        body: content
+      })
+    }).catch((e) => {
+      lastNotify = new Notification(title, {
+        body: content
+      })
+    })
+  } else if (Notification.permission != "denied") {
+    Notification.requestPermission().then(() => {
+      sendNotifaction(title, content);
+    });
+  }
+}
 onMounted(() => {
   window.addEventListener("keyup", enterUp);
+  document.addEventListener('visibilitychange', visibilityChange);
+  createRoomObj();
 })
 onUnmounted(() => {
   window.removeEventListener("keyup", enterUp);
+  document.addEventListener('visibilitychange', visibilityChange);
+  room.release();
+  room = null!;
+  clearInterval(roomInterval);
 })
+
+
 </script>
 <style scoped>
 main {
@@ -741,6 +830,7 @@ main {
   padding: 0px;
   transform: translateY(200px);
   transition: transform 0.3s, width 0.3s;
+  white-space: nowrap;
 }
 
 @media (max-width: 600px) {

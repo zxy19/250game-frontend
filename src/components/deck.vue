@@ -1,14 +1,15 @@
 <template>
-  <div ref="deck_ctr" class="deck_ctr" v-if="props.deck!">
+  <div ref="deck_ctr" class="deck_ctr" v-if="props.deck!" @mouseout.self="(isSelecting = false) || doSelect(-1)">
     <div class="deck-name" v-if="props.deck && props.deck.name">{{ props.deck!.name }}</div>
     <div v-for="(i, idx) in props.deck!.cards" :class="['card_ctr', {
       'select': (!!i.selected) != ((idx >= tx && idx <= sx) || (idx <= tx && idx >= sx))
     }]"
-      :style="{ left: padForTitle + card_wid * Math.min(idx,prepMaxIdx) + 'px', top: padForSelection + 'px', zIndex: idx }"
+      :style="{ left: padForTitle + card_wid * Math.min(idx, prepMaxIdx) + 'px', top: padForSelection + 'px', zIndex: idx }"
       @dblclick="props.deck.cards = props.deck.cards.map((o) => { o.selected = false; return o; })">
       <card :card="i.id" :color="i.color" :from="i.from" :size="card_size" style="float: left;max-height: 100%"
         :select="(!!i.selected) != ((idx >= tx && idx <= sx) || (idx <= tx && idx >= sx))"
-        @mousedown="(isSelecting = true) && doSelect(idx)" @mouseup="(isSelecting = false) || doSelect(-1)"
+        @mousedown="(isSelecting = true) && doSelect(idx)"
+        @mouseup="(isSelecting = false) || doSelect(-1)"
         @mouseover="isSelecting && doSelect(idx)" :real="i.real"></card>
     </div>
   </div>
@@ -19,10 +20,11 @@ import type { IDeck } from "@/interfaces/game";
 import { nextTick, onMounted, onUnmounted, reactive, watch } from "vue";
 
 import { ref } from "vue";
-const props: { deck: IDeck, selectable: boolean ,noScroll:boolean} = defineProps({
+const props: { deck: IDeck, selectable: boolean, noScroll: boolean, thin: boolean } = defineProps({
   deck: Object,
   selectable: Boolean,
-  noScroll: Boolean
+  noScroll: Boolean,
+  thin: Boolean
 }) as any;
 const emit = defineEmits(["select_change"]);
 let isSelecting = false;
@@ -64,7 +66,7 @@ const padForSelection = ref(0);
 const padForTitle = ref(0);
 const prepMaxIdx = ref(0);
 function resize() {
-  if(!deck_ctr.value) return
+  if (!deck_ctr.value) return
   padForSelection.value = 15;
   if (!props.selectable) {
     padForSelection.value = 0;
@@ -78,9 +80,12 @@ function resize() {
     card_size.value = 100;
   }
   else {
+    let minWid = 22;
+    if (props.thin) minWid = 10;
+    
     card_size.value = ((deck_ctr.value as any).clientHeight - padForSelection.value) / 243.137 * 100;
     card_wid.value = ((deck_ctr.value as any).clientWidth - padForTitle.value - card_size.value / 100 * 167.375) / (props.deck!.cards.length - 1);
-    if (!(props.noScroll)&& card_wid.value < 22) card_wid.value = 22;
+    if (!(props.noScroll) && card_wid.value < minWid) card_wid.value = minWid;
     if (card_wid.value > card_size.value * 1.67) {
       card_wid.value = card_size.value * 1.67;
     }
